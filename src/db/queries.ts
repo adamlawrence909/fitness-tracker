@@ -19,7 +19,7 @@ import type {
   ExerciseWithSets,
   SessionSummary,
 } from '@/types'
-import { format, startOfWeek, endOfWeek, addWeeks } from 'date-fns'
+import { format } from 'date-fns'
 
 // ─── User ──────────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ export async function upsertUser(data: Partial<User>): Promise<void> {
 // ─── Phases ────────────────────────────────────────────────────────────────────
 
 export async function getActivePhase(): Promise<Phase | undefined> {
-  return db.phases.where('isActive').equals(1).first()
+  return db.phases.filter(p => p.isActive === true).first()
 }
 
 export async function getAllPhases(): Promise<Phase[]> {
@@ -54,7 +54,7 @@ export async function getAllPhases(): Promise<Phase[]> {
 
 export async function createPhase(data: Omit<Phase, 'id'>): Promise<number> {
   // Deactivate current active phase
-  await db.phases.where('isActive').equals(1).modify({ isActive: false })
+  await db.phases.filter(p => p.isActive === true).modify({ isActive: false })
   return db.phases.add(data)
 }
 

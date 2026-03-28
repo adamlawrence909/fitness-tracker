@@ -30,7 +30,7 @@ export function SettingsPage() {
   const { activePhase: storePhase } = useAppStore()
 
   const activePhase = useLiveQuery(
-    () => db.phases.where('isActive').equals(1).first(),
+    () => db.phases.filter(p => p.isActive === true).first(),
     []
   )
 
@@ -46,7 +46,7 @@ export function SettingsPage() {
     const today = new Date()
     const endDate = addWeeks(today, config.durationWeeks)
 
-    await createPhase({
+    const phaseId = await createPhase({
       type: selectedPhase,
       name: config.name,
       goal: config.goal,
@@ -58,7 +58,7 @@ export function SettingsPage() {
       isActive: true,
     })
 
-    // Create 4-week cycle
+    // Create 4-week cycle for the new phase
     const cycleTypes: Array<{ weekNumber: 1 | 2 | 3 | 4; type: 'build' | 'overload' | 'deload'; isDeload: boolean }> = [
       { weekNumber: 1, type: 'build', isDeload: false },
       { weekNumber: 2, type: 'build', isDeload: false },
@@ -66,18 +66,14 @@ export function SettingsPage() {
       { weekNumber: 4, type: 'deload', isDeload: true },
     ]
 
-    const newPhase = await db.phases.where('isActive').equals(1).first()
-    if (newPhase?.id) {
-      for (const week of cycleTypes) {
-        const weekStart = addWeeks(today, week.weekNumber - 1)
-        const weekEnd = addWeeks(weekStart, 1)
-        await db.weekCycles.add({
-          phaseId: newPhase.id,
-          ...week,
-          startDate: format(weekStart, 'yyyy-MM-dd'),
-          endDate: format(addWeeks(weekStart, 1), 'yyyy-MM-dd'),
-        })
-      }
+    for (const week of cycleTypes) {
+      const weekStart = addWeeks(today, week.weekNumber - 1)
+      await db.weekCycles.add({
+        phaseId: phaseId as number,
+        ...week,
+        startDate: format(weekStart, 'yyyy-MM-dd'),
+        endDate: format(addWeeks(weekStart, 1), 'yyyy-MM-dd'),
+      })
     }
 
     setShowPhaseDialog(false)

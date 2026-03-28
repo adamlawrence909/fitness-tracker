@@ -7,7 +7,7 @@ export function usePhase() {
   const { setActivePhase, setCurrentWeekCycle } = useAppStore()
 
   const activePhase = useLiveQuery(() =>
-    db.phases.where('isActive').equals(1).first()
+    db.phases.filter(p => p.isActive === true).first()
   )
 
   const currentWeekCycle = useLiveQuery(async () => {
