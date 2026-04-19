@@ -39,6 +39,17 @@ export function useRunTracker() {
     startTimeRef.current = Date.now()
     startRun()
 
+    // Reset all run state for a fresh start
+    setState({
+      isTracking: true,
+      distanceMeters: 0,
+      elapsedSeconds: 0,
+      points: [],
+      currentPace: 0,
+      splits: [],
+      error: null,
+    })
+
     // Start elapsed timer
     timerRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000)
