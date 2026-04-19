@@ -13,15 +13,31 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { StepperInput, RepStepper } from '@/components/StepperInput'
 import { deloadRange, suggestDeloadWeight } from '@/utils/calculations'
-import type { Exercise, WorkoutCategory, ExerciseSet } from '@/types'
+import type { Exercise, WorkoutCategory, WorkoutTemplateId } from '@/types'
+import { WORKOUT_TEMPLATES } from '@/types'
 
-const CATEGORY_TABS: Array<{ value: WorkoutCategory; label: string }> = [
-  { value: 'shoulders_triceps', label: 'Shoulders + Tri' },
-  { value: 'chest_triceps', label: 'Chest + Tri' },
-  { value: 'back_biceps', label: 'Back + Bi' },
-  { value: 'legs', label: 'Legs' },
-  { value: 'pilates', label: 'Pilates' },
+// Workout templates available in the Workout page (excludes pure cardio — those use Run page)
+const LIFTING_TEMPLATES: WorkoutTemplateId[] = [
+  'shoulders_triceps',
+  'back_biceps',
+  'chest_triceps',
+  'legs',
+  'pilates',
 ]
+
+const CATEGORY_LABELS: Record<WorkoutCategory, string> = {
+  shoulders: 'Shoulders',
+  triceps:   'Triceps',
+  biceps:    'Biceps',
+  back:      'Back',
+  chest:     'Chest',
+  legs:      'Legs',
+  pilates:   'Pilates',
+  run:       'Run',
+  walk:      'Walk',
+  cycle:     'Cycle',
+  free:      'Free',
+}
 
 function ExerciseCard({
   exercise,
@@ -59,7 +75,6 @@ function ExerciseCard({
   return (
     <Card className={exercise.isStarred ? 'border-yellow-500/40' : ''}>
       <CardContent className="p-4">
-        {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -92,10 +107,9 @@ function ExerciseCard({
           </div>
         </div>
 
-        {/* Sets list */}
         {expanded && sets && sets.length > 0 && (
           <div className="mt-3 space-y-1.5">
-            {sets.map((set, i) => (
+            {sets.map(set => (
               <div
                 key={set.id}
                 className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
@@ -121,7 +135,6 @@ function ExerciseCard({
           </div>
         )}
 
-        {/* Add set button */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetTrigger asChild>
             <Button
@@ -179,27 +192,31 @@ function ExerciseCard({
   )
 }
 
-export function WorkoutPage() {
-  const [activeCategory, setActiveCategory] = useState<WorkoutCategory>('shoulders_triceps')
-  const { isDeloadWeek } = useAppStore()
-  const { activePhase } = usePhase()
-
+// Category tab within a template — loads exercises and manages its own session
+function CategoryTab({
+  category,
+  templateId,
+  isDeload,
+}: {
+  category: WorkoutCategory
+  templateId: WorkoutTemplateId
+  isDeload: boolean
+}) {
   const today = format(new Date(), 'yyyy-MM-dd')
 
-  // Get or create today's session for current category
   const todaySession = useLiveQuery(
     () => db.workoutSessions
-      .filter(s => s.date === today && s.category === activeCategory)
+      .filter(s => s.date === today && s.category === category)
       .first(),
-    [today, activeCategory]
+    [today, category]
   )
 
   const exercises = useLiveQuery(
-    () => db.exercises.where('category').equals(activeCategory).sortBy('isStarred'),
-    [activeCategory]
+    () => db.exercises.where('category').equals(category).sortBy('isStarred'),
+    [category]
   )
 
-  async function getOrCreateSession(category: WorkoutCategory): Promise<number> {
+  async function getOrCreateSession(): Promise<number> {
     const existing = await db.workoutSessions
       .filter(s => s.date === today && s.category === category)
       .first()
@@ -208,12 +225,13 @@ export function WorkoutPage() {
     return db.workoutSessions.add({
       date: today,
       category,
+      workoutTemplateId: templateId,
       notes: undefined,
-    })
+    }) as Promise<number>
   }
 
   async function handleAddSet(exerciseId: number, weight: number, reps: number) {
-    const sessionId = await getOrCreateSession(activeCategory)
+    const sessionId = await getOrCreateSession()
     const existingSets = await db.exerciseSets
       .where('sessionId').equals(sessionId)
       .filter(s => s.exerciseId === exerciseId)
@@ -233,6 +251,47 @@ export function WorkoutPage() {
 
   const sessionId = todaySession?.id ?? 0
 
+  if (exercises?.length === 0) {
+    return (
+      <p className="text-center text-muted-foreground py-8">
+        No exercises found for {CATEGORY_LABELS[category]}.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {exercises
+        ?.sort((a, b) => (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0))
+        .map(exercise => (
+          <ExerciseCard
+            key={exercise.id}
+            exercise={exercise}
+            sessionId={sessionId}
+            isDeload={isDeload}
+            onAddSet={handleAddSet}
+          />
+        ))}
+    </div>
+  )
+}
+
+export function WorkoutPage() {
+  const [activeTemplate, setActiveTemplate] = useState<WorkoutTemplateId>('shoulders_triceps')
+  const { isDeloadWeek } = useAppStore()
+  const { activePhase } = usePhase()
+
+  const template = WORKOUT_TEMPLATES[activeTemplate]
+  const [activeCategory, setActiveCategory] = useState<WorkoutCategory>(
+    template.categories[0] ?? 'legs'
+  )
+
+  function handleTemplateChange(templateId: WorkoutTemplateId) {
+    setActiveTemplate(templateId)
+    const t = WORKOUT_TEMPLATES[templateId]
+    setActiveCategory(t.categories[0] ?? 'legs')
+  }
+
   return (
     <div className="pb-6">
       {/* Header */}
@@ -246,44 +305,61 @@ export function WorkoutPage() {
         )}
       </div>
 
-      {/* Category tabs */}
+      {/* Template tabs */}
       <div className="px-4">
         <Tabs
-          value={activeCategory}
-          onValueChange={(v) => setActiveCategory(v as WorkoutCategory)}
+          value={activeTemplate}
+          onValueChange={v => handleTemplateChange(v as WorkoutTemplateId)}
         >
           <TabsList className="w-full overflow-x-auto flex-nowrap justify-start gap-1 h-auto p-1">
-            {CATEGORY_TABS.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value} className="text-xs whitespace-nowrap">
-                {tab.label}
+            {LIFTING_TEMPLATES.map(id => (
+              <TabsTrigger key={id} value={id} className="text-xs whitespace-nowrap">
+                {WORKOUT_TEMPLATES[id].emoji} {WORKOUT_TEMPLATES[id].name}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {CATEGORY_TABS.map(tab => (
-            <TabsContent key={tab.value} value={tab.value} className="mt-4">
-              <div className="space-y-3">
-                {exercises?.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">
-                    No exercises found for this category.
-                  </p>
-                )}
+          {LIFTING_TEMPLATES.map(templateId => {
+            const tmpl = WORKOUT_TEMPLATES[templateId]
+            return (
+              <TabsContent key={templateId} value={templateId} className="mt-4">
+                {tmpl.categories.length > 1 ? (
+                  // Multi-category template: show sub-tabs
+                  <Tabs
+                    value={activeCategory}
+                    onValueChange={v => setActiveCategory(v as WorkoutCategory)}
+                  >
+                    <TabsList className="w-full mb-4">
+                      {tmpl.categories.map(cat => (
+                        <TabsTrigger key={cat} value={cat} className="flex-1 text-sm">
+                          {CATEGORY_LABELS[cat]}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
 
-                {/* Starred first */}
-                {exercises
-                  ?.sort((a, b) => (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0))
-                  .map(exercise => (
-                    <ExerciseCard
-                      key={exercise.id}
-                      exercise={exercise}
-                      sessionId={sessionId}
+                    {tmpl.categories.map(cat => (
+                      <TabsContent key={cat} value={cat}>
+                        <CategoryTab
+                          category={cat}
+                          templateId={templateId}
+                          isDeload={isDeloadWeek}
+                        />
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                ) : (
+                  // Single-category template: render directly
+                  tmpl.categories[0] && (
+                    <CategoryTab
+                      category={tmpl.categories[0]}
+                      templateId={templateId}
                       isDeload={isDeloadWeek}
-                      onAddSet={handleAddSet}
                     />
-                  ))}
-              </div>
-            </TabsContent>
-          ))}
+                  )
+                )}
+              </TabsContent>
+            )
+          })}
         </Tabs>
       </div>
     </div>

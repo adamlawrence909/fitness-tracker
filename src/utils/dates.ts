@@ -5,10 +5,9 @@ import {
   isToday,
   parseISO,
   differenceInWeeks,
-  isSameDay,
 } from 'date-fns'
-import type { WeeklyScheduleDay, WorkoutCategory, Phase, WeekCycle } from '@/types'
-import { PHASE_CONFIGS } from '@/types'
+import type { WeeklyScheduleDay, WorkoutTemplateId, Phase } from '@/types'
+import { PHASE_CONFIGS, WORKOUT_TEMPLATES } from '@/types'
 
 // ─── Formatting ────────────────────────────────────────────────────────────────
 
@@ -45,21 +44,19 @@ export function formatDistance(meters: number): string {
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
-export const CATEGORY_LABELS: Record<WorkoutCategory | string, string> = {
-  shoulders_triceps: 'Shoulders + Triceps',
-  back_biceps: 'Back + Biceps',
-  chest_triceps: 'Chest + Triceps',
-  legs: 'Legs',
-  pilates: 'Pilates',
-  run: 'Run',
-  walk: 'Walk',
-  cycle: 'Cycle',
-  free: 'Free Activity',
+export function getTemplateLabel(templateId: WorkoutTemplateId | null): string {
+  if (!templateId) return 'Rest'
+  return WORKOUT_TEMPLATES[templateId]?.name ?? templateId
+}
+
+export function getTemplateEmoji(templateId: WorkoutTemplateId | null): string {
+  if (!templateId) return '😴'
+  return WORKOUT_TEMPLATES[templateId]?.emoji ?? '🏋️'
 }
 
 export function getWeeklySchedule(
   phase: Phase | null,
-  sessions: Array<{ date: string; category: WorkoutCategory }>,
+  sessions: Array<{ date: string; workoutTemplateId?: string }>,
   isDeloadWeek: boolean
 ): WeeklyScheduleDay[] {
   const today = new Date()
@@ -71,18 +68,25 @@ export function getWeeklySchedule(
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i)
     const dayName = DAY_NAMES[date.getDay()]
-    const category = schedule[dayName] as WorkoutCategory | null
+    const templateId = (schedule[dayName] ?? null) as WorkoutTemplateId | null
     const dateStr = format(date, 'yyyy-MM-dd')
-    const hasSession = sessions.some(s => s.date === dateStr)
-    const matchingSession = sessions.find(s => s.date === dateStr)
+
+    // A day is "done" if any session logged that day matches the scheduled template
+    const hasSession = sessions.some(
+      s => s.date === dateStr && (
+        !templateId ||
+        s.workoutTemplateId === templateId ||
+        // backwards compat: old sessions without templateId but logged on same date
+        s.workoutTemplateId === undefined
+      )
+    )
 
     return {
       date: dateStr,
       dayName: format(date, 'EEE'),
-      category,
-      categoryLabel: category ? CATEGORY_LABELS[category] : 'Rest',
+      templateId,
+      categoryLabel: getTemplateLabel(templateId),
       hasSession,
-      sessionId: matchingSession ? undefined : undefined, // will be filled from DB
       isToday: isToday(date),
       isDeloadWeek,
     }
@@ -93,7 +97,7 @@ export function getWeeklySchedule(
 
 export function getDeloadWeight(week3Weight: number): { min: number; max: number } {
   return {
-    min: Math.round(week3Weight * 0.5 * 4) / 4,  // round to nearest 0.25
+    min: Math.round(week3Weight * 0.5 * 4) / 4,
     max: Math.round(week3Weight * 0.6 * 4) / 4,
   }
 }

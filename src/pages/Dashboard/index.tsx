@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import { format, isToday, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { Flame, Calendar, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
 import { db } from '@/db/schema'
 import { useAppStore } from '@/store/useAppStore'
@@ -9,21 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
-import { CATEGORY_LABELS, getWeeklySchedule, getPhaseProgress, formatDate } from '@/utils/dates'
-import type { WorkoutCategory } from '@/types'
-import { PHASE_CONFIGS } from '@/types'
-
-const CATEGORY_EMOJI: Record<WorkoutCategory, string> = {
-  shoulders_triceps: '💪',
-  back_biceps: '🏋️',
-  chest_triceps: '🤜',
-  legs: '🦵',
-  pilates: '🧘',
-  run: '🏃',
-  walk: '🚶',
-  cycle: '🚴',
-  free: '✍️',
-}
+import { getWeeklySchedule, getPhaseProgress, getTemplateEmoji, getTemplateLabel } from '@/utils/dates'
 
 const WEEK_TYPE_LABELS = {
   1: 'Week 1 — Build',
@@ -34,11 +20,8 @@ const WEEK_TYPE_LABELS = {
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const { activePhase, currentWeekCycle, isDeloadWeek } = usePhase()
+  const { activePhase, currentWeekCycle } = usePhase()
   const { isDeloadWeek: isDeload } = useAppStore()
-
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const weekStart = format(new Date(Date.now() - new Date().getDay() * 86400000), 'yyyy-MM-dd')
 
   const recentSessions = useLiveQuery(
     () => db.workoutSessions.orderBy('date').reverse().limit(14).toArray(),
@@ -47,11 +30,10 @@ export function Dashboard() {
 
   const phase = activePhase
   const phaseProgress = phase ? getPhaseProgress(phase) : null
-  const schedule = phase ? PHASE_CONFIGS[phase.type].schedule : PHASE_CONFIGS.hypertrophy.schedule
 
   const weekDays = getWeeklySchedule(
     phase,
-    recentSessions?.map(s => ({ date: s.date, category: s.category })) ?? [],
+    recentSessions?.map(s => ({ date: s.date, workoutTemplateId: s.workoutTemplateId })) ?? [],
     isDeload
   )
 
@@ -69,7 +51,7 @@ export function Dashboard() {
       {todaySchedule && (
         <Card
           className="cursor-pointer hover:border-primary/50 transition-colors"
-          onClick={() => todaySchedule.category && navigate('/workout')}
+          onClick={() => todaySchedule.templateId && navigate('/workout')}
         >
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
@@ -79,7 +61,7 @@ export function Dashboard() {
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">
-                    {todaySchedule.category ? CATEGORY_EMOJI[todaySchedule.category] : '😴'}
+                    {getTemplateEmoji(todaySchedule.templateId)}
                   </span>
                   <div>
                     <p className="text-lg font-bold">
@@ -93,7 +75,7 @@ export function Dashboard() {
                   </div>
                 </div>
               </div>
-              {todaySchedule.category && (
+              {todaySchedule.templateId && (
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               )}
             </div>
@@ -103,17 +85,12 @@ export function Dashboard() {
 
       {/* Phase + Week */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Phase card */}
         <Card>
           <CardContent className="p-4 space-y-2">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Phase</p>
-            <p className="font-bold">
-              {phase?.name ?? 'Hypertrophy'}
-            </p>
+            <p className="font-bold">{phase?.name ?? 'Hypertrophy'}</p>
             <p className="text-xs text-muted-foreground">
-              {phase
-                ? `${phase.repRangeMin}–${phase.repRangeMax} reps`
-                : '8–12 reps'}
+              {phase ? `${phase.repRangeMin}–${phase.repRangeMax} reps` : '8–12 reps'}
             </p>
             {phaseProgress && (
               <>
@@ -126,7 +103,6 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Week cycle card */}
         <Card className={isDeload ? 'border-blue-500/50 bg-blue-950/20' : ''}>
           <CardContent className="p-4 space-y-2">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Cycle</p>
@@ -158,48 +134,43 @@ export function Dashboard() {
           This Week
         </h2>
         <div className="space-y-2">
-          {weekDays.map(day => {
-            const hasSession = day.hasSession
-            const isToday = day.isToday
-
-            return (
-              <div
-                key={day.date}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
-                  isToday
-                    ? 'bg-primary/10 ring-1 ring-primary/30'
-                    : 'bg-card border border-border/50'
-                }`}
-              >
-                <div className="w-8 text-center">
-                  <p className={`text-xs font-medium ${isToday ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {day.dayName}
-                  </p>
-                  <p className={`text-sm font-bold ${isToday ? 'text-primary' : ''}`}>
-                    {format(parseISO(day.date), 'd')}
-                  </p>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${isToday ? '' : 'text-muted-foreground'}`}>
-                    {day.categoryLabel}
-                  </p>
-                </div>
-
-                {day.category && (
-                  <span className="text-lg">{CATEGORY_EMOJI[day.category]}</span>
-                )}
-
-                {day.category ? (
-                  hasSession ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                  ) : (
-                    <Circle className="h-5 w-5 text-border shrink-0" />
-                  )
-                ) : null}
+          {weekDays.map(day => (
+            <div
+              key={day.date}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
+                day.isToday
+                  ? 'bg-primary/10 ring-1 ring-primary/30'
+                  : 'bg-card border border-border/50'
+              }`}
+            >
+              <div className="w-8 text-center">
+                <p className={`text-xs font-medium ${day.isToday ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {day.dayName}
+                </p>
+                <p className={`text-sm font-bold ${day.isToday ? 'text-primary' : ''}`}>
+                  {format(parseISO(day.date), 'd')}
+                </p>
               </div>
-            )
-          })}
+
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium truncate ${day.isToday ? '' : 'text-muted-foreground'}`}>
+                  {day.categoryLabel}
+                </p>
+              </div>
+
+              {day.templateId && (
+                <span className="text-lg">{getTemplateEmoji(day.templateId)}</span>
+              )}
+
+              {day.templateId ? (
+                day.hasSession ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                ) : (
+                  <Circle className="h-5 w-5 text-border shrink-0" />
+                )
+              ) : null}
+            </div>
+          ))}
         </div>
       </div>
 

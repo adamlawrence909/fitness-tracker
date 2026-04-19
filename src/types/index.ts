@@ -2,7 +2,23 @@
 
 export type PhaseType = 'hypertrophy' | 'strength' | 'endurance' | 'deload'
 export type WeekType = 'build' | 'overload' | 'deload'
+
+// Atomic muscle group / activity categories — stored on Exercise and WorkoutSession
 export type WorkoutCategory =
+  | 'shoulders'
+  | 'triceps'
+  | 'biceps'
+  | 'back'
+  | 'chest'
+  | 'legs'
+  | 'pilates'
+  | 'run'
+  | 'walk'
+  | 'cycle'
+  | 'free'
+
+// Template IDs — used in phase schedules to name a grouped workout day
+export type WorkoutTemplateId =
   | 'shoulders_triceps'
   | 'back_biceps'
   | 'chest_triceps'
@@ -12,6 +28,26 @@ export type WorkoutCategory =
   | 'walk'
   | 'cycle'
   | 'free'
+
+export interface WorkoutTemplate {
+  id: WorkoutTemplateId
+  name: string
+  emoji: string
+  categories: WorkoutCategory[]  // muscle groups in this workout (empty for cardio)
+}
+
+export const WORKOUT_TEMPLATES: Record<WorkoutTemplateId, WorkoutTemplate> = {
+  shoulders_triceps: { id: 'shoulders_triceps', name: 'Shoulders + Triceps', emoji: '💪', categories: ['shoulders', 'triceps'] },
+  back_biceps:       { id: 'back_biceps',       name: 'Back + Biceps',       emoji: '🏋️', categories: ['back', 'biceps'] },
+  chest_triceps:     { id: 'chest_triceps',     name: 'Chest + Triceps',     emoji: '🤜', categories: ['chest', 'triceps'] },
+  legs:              { id: 'legs',              name: 'Legs',                emoji: '🦵', categories: ['legs'] },
+  pilates:           { id: 'pilates',           name: 'Pilates',             emoji: '🧘', categories: ['pilates'] },
+  run:               { id: 'run',               name: 'Run',                 emoji: '🏃', categories: [] },
+  walk:              { id: 'walk',              name: 'Walk',                emoji: '🚶', categories: [] },
+  cycle:             { id: 'cycle',             name: 'Cycle',               emoji: '🚴', categories: [] },
+  free:              { id: 'free',              name: 'Free Activity',        emoji: '✍️', categories: [] },
+}
+
 export type ActivityMode = 'run' | 'walk' | 'cycle' | 'pilates' | 'free'
 export type WeightUnit = 'kg' | 'band'
 
@@ -56,13 +92,14 @@ export interface WeekCycle {
 
 export interface WorkoutSession {
   id?: number
-  date: string         // ISO date string
+  date: string                      // ISO date string
   category: WorkoutCategory
+  workoutTemplateId?: WorkoutTemplateId  // which named workout this session belongs to
   cycleWeekId?: number
   phaseId?: number
   durationMinutes?: number
   notes?: string
-  completedAt?: string // ISO date string
+  completedAt?: string              // ISO date string
 }
 
 export interface Exercise {
@@ -154,9 +191,9 @@ export interface ProgressDataPoint {
 }
 
 export interface WeeklyScheduleDay {
-  date: string               // ISO date string
+  date: string
   dayName: string
-  category: WorkoutCategory | null
+  templateId: WorkoutTemplateId | null
   categoryLabel: string
   hasSession: boolean
   sessionId?: number
@@ -174,7 +211,7 @@ export interface PhaseConfig {
   repRangeMin: number
   repRangeMax: number
   suggestedNextPhase: PhaseType
-  schedule: Record<string, WorkoutCategory | null>
+  schedule: Record<string, WorkoutTemplateId | null>
 }
 
 export const PHASE_CONFIGS: Record<PhaseType, PhaseConfig> = {
