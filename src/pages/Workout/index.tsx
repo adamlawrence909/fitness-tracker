@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
 import { Plus, ChevronDown, ChevronUp, Star, Trophy, Trash2, CheckCircle } from 'lucide-react'
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { StepperInput, RepStepper } from '@/components/StepperInput'
+import { RestTimer } from '@/components/RestTimer'
 import { deloadRange, suggestDeloadWeight } from '@/utils/calculations'
 import type { Exercise, WorkoutCategory, WorkoutTemplateId } from '@/types'
 import { WORKOUT_TEMPLATES } from '@/types'
@@ -197,10 +198,12 @@ function CategoryTab({
   category,
   templateId,
   isDeload,
+  onSetLogged,
 }: {
   category: WorkoutCategory
   templateId: WorkoutTemplateId
   isDeload: boolean
+  onSetLogged: () => void
 }) {
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -247,6 +250,8 @@ function CategoryTab({
       isPB: false,
       createdAt: new Date(),
     })
+
+    onSetLogged()
   }
 
   const sessionId = todaySession?.id ?? 0
@@ -286,6 +291,15 @@ export function WorkoutPage() {
     template.categories[0] ?? 'legs'
   )
 
+  // Rest timer state — timerKey increments to restart the timer on each new set
+  const [showTimer, setShowTimer] = useState(false)
+  const [timerKey, setTimerKey] = useState(0)
+
+  const handleSetLogged = useCallback(() => {
+    setShowTimer(true)
+    setTimerKey(k => k + 1)
+  }, [])
+
   function handleTemplateChange(templateId: WorkoutTemplateId) {
     setActiveTemplate(templateId)
     const t = WORKOUT_TEMPLATES[templateId]
@@ -294,6 +308,9 @@ export function WorkoutPage() {
 
   return (
     <div className="pb-6">
+      {showTimer && (
+        <RestTimer timerKey={timerKey} onDismiss={() => setShowTimer(false)} />
+      )}
       {/* Header */}
       <div className="px-4 pt-6 pb-3">
         <h1 className="text-2xl font-bold">Workout</h1>
@@ -343,6 +360,7 @@ export function WorkoutPage() {
                           category={cat}
                           templateId={templateId}
                           isDeload={isDeloadWeek}
+                          onSetLogged={handleSetLogged}
                         />
                       </TabsContent>
                     ))}
@@ -354,6 +372,7 @@ export function WorkoutPage() {
                       category={tmpl.categories[0]}
                       templateId={templateId}
                       isDeload={isDeloadWeek}
+                      onSetLogged={handleSetLogged}
                     />
                   )
                 )}
